@@ -16,6 +16,8 @@ namespace StockAnalyzer.Web.Controllers
         [Route("api/stocks/{ticker}")] 
         public async Task<IHttpActionResult> Get(string ticker)
         {
+            ticker = ticker.ToUpper();
+
             var store = new DataStore(HostingEnvironment.MapPath("~/bin"));
 
             var data = await store.LoadStocks();

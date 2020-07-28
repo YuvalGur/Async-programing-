@@ -23,6 +23,7 @@ namespace StockAnalyzer.Web.Controllers
         [Route("Stock/{ticker}")]
         public async Task<ActionResult> Stock(string ticker)
         {
+            ticker = ticker.ToUpper();
             if (string.IsNullOrWhiteSpace(ticker)) ticker = "MSFT";
 
             ViewBag.Title = $"Stock Details for {ticker}";

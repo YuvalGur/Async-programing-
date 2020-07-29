@@ -37,38 +37,47 @@ namespace StockAnalyzer.Windows
             Search.Content = "Cancel";
             #endregion
 
-            var loadLinesTask = Task.Run(() =>
-          {
-              var lines = File.ReadAllLines(@"StockPrices_Small.csv");
+            if (cancellationTokenSource != null)
+            {
+                cancellationTokenSource.Cancel();
+                cancellationTokenSource = null;
+                return;
+            }
 
-              return lines;
-          });
+            cancellationTokenSource = new CancellationTokenSource();
+            cancellationTokenSource.Token.Register(() =>
+            {
+                Notes.Text = "cancellation requested";
+            });
+
+            var loadLinesTask = SearchForStocks(cancellationTokenSource.Token);
 
             var processStocksTask = loadLinesTask.ContinueWith(t =>
-              {
-                  var lines = t.Result;
-                  var data = new List<StockPrice>();
-                  foreach (var line in lines.Skip(1))
-                  {
-                      var segments = line.Split(',');
+            {
+                var lines = t.Result;
+                var data = new List<StockPrice>();
+                foreach (var line in lines.Skip(1))
+                {
+                    var segments = line.Split(',');
 
-                      for (var i = 0; i < segments.Length; i++) segments[i] = segments[i].Trim('\'', '"');
-                      var price = new StockPrice
-                      {
-                          Ticker = segments[0],
-                          TradeDate = DateTime.ParseExact(segments[1], "M/d/yyyy h:mm:ss tt", CultureInfo.InvariantCulture),
-                          Volume = Convert.ToInt32(segments[6], CultureInfo.InvariantCulture),
-                          Change = Convert.ToDecimal(segments[7], CultureInfo.InvariantCulture),
-                          ChangePercent = Convert.ToDecimal(segments[8], CultureInfo.InvariantCulture),
-                      };
-                      data.Add(price);
-                  }
+                    for (var i = 0; i < segments.Length; i++) segments[i] = segments[i].Trim('\'', '"');
+                    var price = new StockPrice
+                    {
+                        Ticker = segments[0],
+                        TradeDate = DateTime.ParseExact(segments[1], "M/d/yyyy h:mm:ss tt", CultureInfo.InvariantCulture),
+                        Volume = Convert.ToInt32(segments[6], CultureInfo.InvariantCulture),
+                        Change = Convert.ToDecimal(segments[7], CultureInfo.InvariantCulture),
+                        ChangePercent = Convert.ToDecimal(segments[8], CultureInfo.InvariantCulture),
+                    };
+                    data.Add(price);
+                }
 
-                  Dispatcher.Invoke(() =>
-                  {
-                      Stocks.ItemsSource = data.Where(price => price.Ticker == Ticker.Text.ToUpper());
-                  });
-              }, TaskContinuationOptions.OnlyOnRanToCompletion);
+                Dispatcher.Invoke(() =>
+                {
+                    Stocks.ItemsSource = data.Where(price => price.Ticker == Ticker.Text.ToUpper());
+                });
+            },
+             cancellationTokenSource.Token, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Current);
 
             loadLinesTask.ContinueWith(t =>
             {
@@ -76,7 +85,7 @@ namespace StockAnalyzer.Windows
                 {
                     Notes.Text = t.Exception.InnerException.Message;
                 });
-            },TaskContinuationOptions.OnlyOnFaulted);
+            }, TaskContinuationOptions.OnlyOnFaulted);
             processStocksTask.ContinueWith(_ =>
             {
                 Dispatcher.Invoke(() =>
@@ -88,6 +97,16 @@ namespace StockAnalyzer.Windows
                     cancellationTokenSource = null;
                     #endregion
                 });
+            });
+        }
+
+        private static Task<string[]> SearchForStocks()
+        {
+            return Task.Run(() =>
+            {
+                var lines = File.ReadAllLines(@"StockPrices_Small.csv");
+
+                return lines;
             });
         }
 

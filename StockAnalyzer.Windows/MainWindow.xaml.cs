@@ -37,6 +37,7 @@ namespace StockAnalyzer.Windows
             Search.Content = "Cancel";
             #endregion
 
+            #region Cancellation
             if (cancellationTokenSource != null)
             {
                 cancellationTokenSource.Cancel();
@@ -49,25 +50,48 @@ namespace StockAnalyzer.Windows
             {
                 Notes.Text = "cancellation requested";
             });
+            #endregion
 
             try
             {
-                var service = new StockService();
-                var data = await service.GetStockPricesFor(Ticker.Text, cancellationTokenSource.Token);
-                Stocks.ItemsSource = data;
+                var tickers = Ticker.Text.Split(',', ' ');
+
+                var service = new MockStockService();
+
+                var tickerLoadingTasks = new List<Task<IEnumerable<StockPrice>>>();
+
+                foreach (var ticker in tickers)
+                {
+                    var loadTask = service.GetStockPricesFor(ticker, cancellationTokenSource.Token);
+                    tickerLoadingTasks.Add(loadTask);
+                }
+
+                var timeoutTask = Task.Delay(50);
+                var allStocksLoadingTask = Task.WhenAll(tickerLoadingTasks);
+                var completedTask = await Task.WhenAny(timeoutTask, allStocksLoadingTask);
+
+                if (completedTask == timeoutTask)
+                {
+                    cancellationTokenSource.Cancel();
+                    cancellationTokenSource = null;
+
+                    throw new Exception("timeout!");
+                };
+
+
+
+                Stocks.ItemsSource = allStocksLoadingTask.Result.SelectMany(stocks => stocks);
             }
             catch (Exception ex)
             {
                 Notes.Text += ex.Message + Environment.NewLine;
-                
             }
-            #region After stock data is loaded
-            StocksStatus.Text = $"Loaded stocks for {Ticker.Text} in {watch.ElapsedMilliseconds}ms";
+
+            #region After stock data is loaded             StocksStatus.Text = $"Loaded stocks for {Ticker.Text} in {watch.ElapsedMilliseconds}ms";
             StockProgress.Visibility = Visibility.Hidden;
             Search.Content = "Search";
             cancellationTokenSource = null;
-            #endregion
-        }
+            #endregion         }
 
         private static Task<string[]> SearchForStocks()
         {
@@ -81,22 +105,27 @@ namespace StockAnalyzer.Windows
 
         private Task<List<string>> SearchForStocks(CancellationToken cancellationToken)
         {
+
+
             var loadLinesTask = Task.Run(async () =>
             {
+
                 var lines = new List<string>();
 
                 using (var stream = new StreamReader(File.OpenRead(@"StockPrices_small.csv")))
                 {
+
                     string line;
                     while ((line = await stream.ReadLineAsync()) != null)
                     {
-                        if (cancellationToken.IsCancellationRequested)
+                        if (cancellationToken.IsCancellationRequested) ;
                         {
                             return lines;
                         }
                         lines.Add(line);
                     }
                 }
+
 
                 return lines;
             }, cancellationToken);
@@ -107,7 +136,6 @@ namespace StockAnalyzer.Windows
         private void Hyperlink_OnRequestNavigate(object sender, RequestNavigateEventArgs e)
         {
             Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri));
-
             e.Handled = true;
         }
 
@@ -117,8 +145,3 @@ namespace StockAnalyzer.Windows
         }
     }
 }
-
-/*
-
-
- */

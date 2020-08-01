@@ -56,41 +56,62 @@ namespace StockAnalyzer.Windows
             {
                 var tickers = Ticker.Text.Split(',', ' ');
 
-                var service = new MockStockService();
+                var service = new StockService();
+                var stocks = new ConcurrentBag<StockPrice>();
 
                 var tickerLoadingTasks = new List<Task<IEnumerable<StockPrice>>>();
 
                 foreach (var ticker in tickers)
                 {
-                    var loadTask = service.GetStockPricesFor(ticker, cancellationTokenSource.Token);
-                    tickerLoadingTasks.Add(loadTask);
+                    var loadTask = service.GetStockPricesFor(ticker, cancellationTokenSource.Token).
+                        ContinueWith(t =>
+                        {
+                            foreach (var stock in t.Result.Take(5)) stocks.Add(stock);
+
+                            Dispatcher.Invoke(() =>
+                            {
+                                Stocks.ItemsSource = stocks.ToArray();
+                            });
+                            
+                            return t.Result;
+                        });
                 }
+                 var allStocksLoadingTask = Task.WhenAll(tickerLoadingTasks);
 
-                var timeoutTask = Task.Delay(50);
-                var allStocksLoadingTask = Task.WhenAll(tickerLoadingTasks);
-                var completedTask = await Task.WhenAny(timeoutTask, allStocksLoadingTask);
-
-                if (completedTask == timeoutTask)
-                {
-                    cancellationTokenSource.Cancel();
-                    cancellationTokenSource = null;
-
-                    throw new Exception("timeout!");
-                };
+                #region handaling timout
+                //var timeoutTask = Task.Delay(50);
+                //var completedTask = await Task.WhenAny(timeoutTask, allStocksLoadingTask);
 
 
+                //if (completedTask == timeoutTask)
+                //{
+                //    cancellationTokenSource.Cancel();
+                //    cancellationTokenSource = null;
 
-                Stocks.ItemsSource = allStocksLoadingTask.Result.SelectMany(stocks => stocks);
+                //    throw new Exception("timeout!");
+                //};
+                #endregion
+
+                await allStocksLoadingTask;
+
             }
             catch (Exception ex)
             {
                 Notes.Text += ex.Message + Environment.NewLine;
             }
 
+
+
+
+
             #region After stock data is loaded             StocksStatus.Text = $"Loaded stocks for {Ticker.Text} in {watch.ElapsedMilliseconds}ms";
             StockProgress.Visibility = Visibility.Hidden;
             Search.Content = "Search";
             cancellationTokenSource = null;
+
+
+
+
             #endregion         }
 
         private static Task<string[]> SearchForStocks()

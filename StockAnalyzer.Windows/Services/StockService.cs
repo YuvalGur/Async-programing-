@@ -16,8 +16,10 @@ namespace StockAnalyzer.Windows.Services
     }
     public class StockService:IStockService
     {
+        int i = 0;
         public async Task<IEnumerable<StockPrice>> GetStockPricesFor(string ticker,CancellationToken cancellationToken)
         {
+            await Task.Delay((i++) * 1000);
             using (var client = new HttpClient())
             {
                 ticker = ticker.ToUpper();
